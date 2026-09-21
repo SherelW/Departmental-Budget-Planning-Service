@@ -1,6 +1,5 @@
 # 1. Справочник подразделений
 def add_department(name, head):
-    """Создание подразделения."""
     department = {"name": name, "head": head}
     print(f"Подразделение добавлено: {department}")
     return department
@@ -8,7 +7,6 @@ def add_department(name, head):
 
 # 2. Формирование бюджета
 def create_budget(department, period, amount):
-    """Формирование бюджета подразделения на выбранный период."""
     budget = {
         "department": department["name"],
         "period": period,
