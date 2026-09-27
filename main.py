@@ -1,34 +1,32 @@
-# 1. Справочник подразделений
-def add_department(name, head):
-    department = {"name": name, "head": head}
-    print(f"Подразделение добавлено: {department}")
-    return department
+from add_department import Department
+from create_budget import Budget
+from storage import Storage
 
 
-# 2. Формирование бюджета
-def create_budget(department, period, amount):
-    budget = {
-        "department": department["name"],
-        "period": period,
-        "amount": amount,
-        "items": []
-    }
-    print(f"Бюджет создан: {budget}")
-    return budget
+def main():
+    department = Department("Подразделение финансов", "Иванов И.")
+
+    budget = Budget(department, "01.09.2026", 1_000_000)
+
+    budget.add_item("Зарплата", 20_000)
+    budget.add_item("Оборудование", 100_000)
+    budget.add_item("Командировки", 50_000)
+
+    print("Подразделение:")
+    print(department)
+    print("\nБюджет:")
+    print(budget)
+    print(f"\nВсего запланировано: {budget.get_total_planned()} руб.")
+
+    storage = Storage("data/budgets.json")
+    storage.save([budget])
+    print("\nДанные сохранены в data/budgets.json")
+
+    loaded_raw = storage.load()
+    loaded_budgets = [Budget.from_dict(item) for item in loaded_raw]
+    print(f"\nЗагружено бюджетов: {len(loaded_budgets)}")
+    print(loaded_budgets[0])
 
 
-#  3. Статьи бюджета
-def add_item(budget, category, planned):
-    item = {"category": category, "planned": planned}
-    budget["items"].append(item)
-    print(f"Статья добавлена: {item}")
-    return item
-
-
-
-dep = add_department("Подразделение финансов", "Иванов И.")
-
-budget = create_budget(dep, "01.09.2026", 1_000_000)
-
-add_item(budget, "Зарплата", 20_000)
-print(budget)
+if __name__ == "__main__":
+    main()
