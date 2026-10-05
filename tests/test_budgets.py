@@ -1,6 +1,6 @@
 import pytest
-from add_department import Department
-from create_budget import Budget, BudgetItem
+from department import Department
+from budget_item import Budget, BudgetItem
 
 
 def _make_department() -> Department:

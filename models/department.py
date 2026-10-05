@@ -1,4 +1,5 @@
 class Department:
+    """Подразделение"""
 
     def __init__(self, name: str, head: str):
         if not name:

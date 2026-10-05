@@ -3,24 +3,20 @@ from pathlib import Path
 
 
 class Storage:
-    """Хранилище данных в JSON-файле."""
-
     def __init__(self, filename: str):
         self.filename = Path(filename)
 
-    def save(self, data: list) -> None:
-
+    def save(self, obj) -> None:
         self.filename.parent.mkdir(parents=True, exist_ok=True)
-
-        raw = [item.to_dict() if hasattr(item, "to_dict") else item for item in data]
+        data = obj.to_dict() if hasattr(obj, "to_dict") else obj
         with self.filename.open("w", encoding="utf-8") as file:
-            json.dump(raw, file, ensure_ascii=False, indent=4)
+            json.dump(data, file, ensure_ascii=False, indent=4)
 
-    def load(self) -> list:
+    def load(self) -> dict:
         try:
             with self.filename.open("r", encoding="utf-8") as file:
                 return json.load(file)
         except FileNotFoundError:
-            return []
+            return {}
         except json.JSONDecodeError:
             raise ValueError("Файл содержит некорректный JSON")
