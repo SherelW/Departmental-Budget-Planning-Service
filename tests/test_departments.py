@@ -1,5 +1,5 @@
 import pytest
-from add_department import Department
+from models import Department
 
 
 def test_create_department():
@@ -29,3 +29,9 @@ def test_department_from_dict():
     department = Department.from_dict(data)
     assert department.name == "Финансовый отдел"
     assert department.head == "Иванов И."
+
+
+def test_department_id_in_dict():
+    department = Department("Финансовый отдел", "Иванов И.", id=3)
+    assert department.to_dict()["id"] == 3
+    assert Department.from_dict(department.to_dict()).id == 3

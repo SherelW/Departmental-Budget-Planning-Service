@@ -31,7 +31,9 @@ def main():
         print(f"Итого по подразделению: {budget.get_total_planned()} руб.")
         print("-" * 40)
 
-    print(f"\nОбщая сумма за период: {planning.get_total_by_period('01.09.2026 - 30.09.2026')} руб.")
+    period = "01.09.2026 - 30.09.2026"
+    total = planning.get_total_by_period(period)
+    print(f"\nОбщая сумма за период: {total} руб.")
 
     storage = Storage("data/planning.json")
     storage.save(planning)

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from models import Planning
+
 
 class Storage:
     def __init__(self, filename: str):
@@ -20,3 +22,11 @@ class Storage:
             return {}
         except json.JSONDecodeError:
             raise ValueError("Файл содержит некорректный JSON")
+
+
+def load_planning(filename) -> Planning:
+
+    data = Storage(filename).load()
+    if not data:
+        return Planning("Планирование")
+    return Planning.from_dict(data)

@@ -17,4 +17,7 @@ class BudgetItem:
         return cls(category=data["category"], planned=data["planned"])
 
     def __repr__(self) -> str:
-        return f"BudgetItem(category={self.category!r}, planned={self.planned})"
+        return (
+            f"BudgetItem(category={self.category!r}, "
+            f"planned={self.planned})"
+        )
