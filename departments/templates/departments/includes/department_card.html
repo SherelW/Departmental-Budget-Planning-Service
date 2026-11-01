@@ -1,0 +1,18 @@
+<article class="card department-card mb-3">
+    <div class="card-body">
+        <h2 class="card-title h4">
+            {{ department.name|default:"Без названия" }}
+        </h2>
+
+        <p class="card-text">
+            Руководитель: {{ department.head }}
+        </p>
+
+        <a
+            href="{% url 'departments:detail' department.id %}"
+            class="btn btn-primary"
+        >
+            Подробнее
+        </a>
+    </div>
+</article>

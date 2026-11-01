@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}
+    Бюджеты – Бюджетное планирование
+{% endblock %}
+
+{% block content %}
+    <h1>Бюджеты</h1>
+
+    <p>
+        Всего бюджетов: {{ budgets|length }}
+    </p>
+
+    <ul class="list-group mb-3">
+        {% for budget in budgets %}
+            <li class="list-group-item d-flex justify-content-between">
+                <a href="{% url 'budgets:detail' budget.id %}">
+                    {{ budget.department.name|default:"Без названия" }}
+                    – {{ budget.period }}
+                </a>
+                {% include "budgets/includes/budget_status.html" %}
+            </li>
+        {% empty %}
+            <li class="list-group-item">
+                Бюджеты не найдены.
+            </li>
+        {% endfor %}
+    </ul>
+
+    {% for item in period_totals %}
+        <p>
+            Общая сумма за {{ item.period }}:
+            <strong>{{ item.total|floatformat:"0g" }} руб.</strong>
+        </p>
+    {% endfor %}
+{% endblock %}

@@ -25,7 +25,7 @@ class Storage:
 
 
 def load_planning(filename) -> Planning:
-
+    """Загрузить Planning из JSON (пустой Planning, если файла нет)."""
     data = Storage(filename).load()
     if not data:
         return Planning("Планирование")

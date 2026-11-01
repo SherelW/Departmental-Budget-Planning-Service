@@ -1,0 +1,49 @@
+body {
+    min-height: 100vh;
+}
+
+.site-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.site-logo {
+    width: 44px;
+    height: 44px;
+    margin-right: 0.75rem;
+}
+
+.site-brand-text {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.site-nav .nav-link {
+    color: #495057;
+    border-radius: 6px;
+}
+
+.site-nav .nav-link:hover {
+    color: #0d6efd;
+    background-color: #e7f1ff;
+}
+
+.department-card {
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+
+.department-card:hover {
+    border-color: #0d6efd;
+}
+
+.budget-status {
+    font-weight: 600;
+}
+
+.budget-status-empty {
+    font-style: italic;
+}

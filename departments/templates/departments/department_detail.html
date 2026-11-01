@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if department %}
+        {{ department.name }} – Бюджетное планирование
+    {% else %}
+        Подразделение не найдено – Бюджетное планирование
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if department %}
+        <div class="card department-card">
+            <div class="card-body">
+                <h1 class="card-title">
+                    {{ department.name }}
+                </h1>
+
+                <p class="card-text">
+                    <strong>ID:</strong> {{ department.id }}
+                </p>
+
+                <p class="card-text">
+                    <strong>Руководитель:</strong> {{ department.head }}
+                </p>
+
+                <p class="card-text"><strong>Бюджеты:</strong></p>
+                <ul class="list-group mb-3">
+                    {% for budget in budgets %}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <a href="{% url 'budgets:detail' budget.id %}">
+                                {{ budget.period }}
+                            </a>
+                            {% include "budgets/includes/budget_status.html" %}
+                        </li>
+                    {% empty %}
+                        <li class="list-group-item">
+                            Бюджетов у подразделения пока нет.
+                        </li>
+                    {% endfor %}
+                </ul>
+
+                <p class="card-text">
+                    <strong>Всего запланировано:</strong>
+                    {{ total|floatformat:"0g" }} руб.
+                </p>
+            </div>
+        </div>
+    {% else %}
+        <h1 class="text-danger">Подразделение не найдено</h1>
+        <p>
+            Подразделение с указанным идентификатором отсутствует.
+        </p>
+    {% endif %}
+
+    <a
+        href="{% url 'departments:list' %}"
+        class="btn btn-outline-secondary mt-3"
+    >
+        ← к списку подразделений
+    </a>
+{% endblock %}

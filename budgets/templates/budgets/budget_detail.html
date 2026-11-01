@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if budget %}
+        Бюджет №{{ budget.id }} – Бюджетное планирование
+    {% else %}
+        Бюджет не найден – Бюджетное планирование
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if budget %}
+        <div class="card">
+            <div class="card-body">
+                <h1 class="card-title">
+                    Бюджет №{{ budget.id }}
+                </h1>
+
+                <p class="card-text">
+                    <strong>Подразделение:</strong>
+                    <a href="{% url 'departments:detail' budget.department.id %}">
+                        {{ budget.department.name }}
+                    </a>
+                </p>
+
+                <p class="card-text">
+                    <strong>Руководитель:</strong>
+                    {{ budget.department.head }}
+                </p>
+
+                <p class="card-text">
+                    <strong>Период:</strong> {{ budget.period }}
+                </p>
+
+                <p class="card-text">
+                    <strong>Статус:</strong>
+                    {% include "budgets/includes/budget_status.html" %}
+                </p>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Статья</th>
+                            <th class="text-end">План</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in budget.items %}
+                            <tr>
+                                <td>{{ item.category }}</td>
+                                <td class="text-end">
+                                    {{ item.planned|floatformat:"0g" }} руб.
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="2">Статей бюджета нет.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th>Итого</th>
+                            <th class="text-end">
+                                {{ budget.get_total_planned|floatformat:"0g" }} руб.
+                            </th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <h1 class="text-danger">Бюджет не найден</h1>
+        <p>
+            Бюджет с указанным идентификатором отсутствует.
+        </p>
+    {% endif %}
+
+    <a
+        href="{% url 'budgets:list' %}"
+        class="btn btn-outline-secondary mt-3"
+    >
+        ← к списку бюджетов
+    </a>
+{% endblock %}

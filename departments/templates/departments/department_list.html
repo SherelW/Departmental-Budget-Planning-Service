@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}
+    Подразделения – Бюджетное планирование
+{% endblock %}
+
+{% block content %}
+    <h1>Подразделения</h1>
+
+    <p>
+        Всего подразделений: {{ departments|length }}
+    </p>
+
+    {% for department in departments %}
+        {% include "departments/includes/department_card.html" %}
+    {% empty %}
+        <p>Подразделения не найдены.</p>
+    {% endfor %}
+{% endblock %}
