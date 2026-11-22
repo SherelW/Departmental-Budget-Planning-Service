@@ -18,14 +18,14 @@
 
                 <p class="card-text">
                     <strong>Подразделение:</strong>
-                    <a href="{% url 'departments:detail' budget.department.id %}">
-                        {{ budget.department.name }}
+                    <a href="{% url 'departments:detail' budget.department_id %}">
+                        {{ budget.department_name }}
                     </a>
                 </p>
 
                 <p class="card-text">
                     <strong>Руководитель:</strong>
-                    {{ budget.department.head }}
+                    {{ budget.department_head }}
                 </p>
 
                 <p class="card-text">
@@ -45,7 +45,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for item in budget.items %}
+                        {% for item in items %}
                             <tr>
                                 <td>{{ item.category }}</td>
                                 <td class="text-end">
@@ -62,7 +62,7 @@
                         <tr>
                             <th>Итого</th>
                             <th class="text-end">
-                                {{ budget.get_total_planned|floatformat:"0g" }} руб.
+                                {{ budget.total|floatformat:"0g" }} руб.
                             </th>
                         </tr>
                     </tfoot>

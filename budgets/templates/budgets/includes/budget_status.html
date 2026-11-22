@@ -1,6 +1,6 @@
-{% if budget.items %}
+{% if budget.total %}
     <span class="badge bg-success budget-status budget-status-filled">
-        {{ budget.get_total_planned|floatformat:"0g" }} руб.
+        {{ budget.total|floatformat:"0g" }} руб.
     </span>
 {% else %}
     <span class="badge bg-secondary budget-status budget-status-empty">

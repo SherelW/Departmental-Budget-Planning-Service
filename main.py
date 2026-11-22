@@ -17,6 +17,19 @@ def main():
     budget_it.add_item("Зарплата", 700_000)
     budget_it.add_item("Оборудование", 300_000)
 
+    budget_finance_oct = planning.add_budget(
+        finance, "01.10.2026 - 31.10.2026"
+    )
+    budget_finance_oct.add_item("Зарплата", 500_000)
+    budget_finance_oct.add_item("Командировки", 30_000)
+
+    marketing = Department("Отдел маркетинга", "Сидорова А.")
+    budget_marketing = planning.add_budget(
+        marketing, "01.09.2026 - 30.09.2026"
+    )
+    budget_marketing.add_item("Реклама", 250_000)
+    budget_marketing.add_item("Зарплата", 300_000)
+
     print("=== Планирование ===")
     print(planning)
     print()

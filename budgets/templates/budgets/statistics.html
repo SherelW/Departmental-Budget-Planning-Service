@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}
+    Статистика – Бюджетное планирование
+{% endblock %}
+
+{% block content %}
+    <h1>Статистика бюджетов</h1>
+
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card statistics-item"><div class="card-body">
+                <p class="card-text mb-1">Бюджетов</p>
+                <h2 class="h4">{{ budgets_count }}</h2>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card statistics-item"><div class="card-body">
+                <p class="card-text mb-1">Всего запланировано</p>
+                <h2 class="h4">{{ totals.total_planned|floatformat:"0g" }} руб.</h2>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card statistics-item"><div class="card-body">
+                <p class="card-text mb-1">Средняя статья</p>
+                <h2 class="h4">{{ totals.avg_item|floatformat:"0g" }} руб.</h2>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card statistics-item"><div class="card-body">
+                <p class="card-text mb-1">Крупнейшая статья</p>
+                <h2 class="h4">{{ totals.max_item|floatformat:"0g" }} руб.</h2>
+            </div></div>
+        </div>
+    </div>
+
+    <h2 class="h4">По подразделениям</h2>
+    <table class="table mb-4">
+        <thead>
+            <tr>
+                <th>Подразделение</th>
+                <th class="text-end">Бюджетов</th>
+                <th class="text-end">Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in by_department %}
+                <tr>
+                    <td>{{ row.department_name }}</td>
+                    <td class="text-end">{{ row.budgets_count }}</td>
+                    <td class="text-end">{{ row.total|floatformat:"0g" }} руб.</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="3">Данные отсутствуют.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2 class="h4">По статьям расходов</h2>
+    <table class="table mb-4">
+        <thead>
+            <tr>
+                <th>Статья</th>
+                <th class="text-end">Раз встречается</th>
+                <th class="text-end">Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in by_category %}
+                <tr>
+                    <td>{{ row.category }}</td>
+                    <td class="text-end">{{ row.items_count }}</td>
+                    <td class="text-end">{{ row.total|floatformat:"0g" }} руб.</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="3">Данные отсутствуют.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2 class="h4">Три самые крупные статьи</h2>
+    <ol class="mb-4">
+        {% for item in top_items %}
+            <li>
+                {{ item.category }} – {{ item.planned|floatformat:"0g" }} руб.
+            </li>
+        {% empty %}
+            <li>Данные отсутствуют.</li>
+        {% endfor %}
+    </ol>
+
+    <h2 class="h4">
+        Статьи от {{ large_item_limit|floatformat:"0g" }} руб.
+    </h2>
+    <ul class="mb-4">
+        {% for item in large_items %}
+            <li>
+                {{ item.category }} – {{ item.planned|floatformat:"0g" }} руб.
+            </li>
+        {% empty %}
+            <li>Таких статей нет.</li>
+        {% endfor %}
+    </ul>
+
+    <h2 class="h4">Крупные бюджеты</h2>
+    <form method="get" class="row g-2 align-items-end mb-3">
+        <div class="col-auto">
+            <label for="min_total" class="form-label">
+                Сумма бюджета не менее, руб.:
+            </label>
+            <input
+                type="number"
+                id="min_total"
+                name="min_total"
+                class="form-control"
+                min="0"
+                step="1000"
+                value="{{ min_total|floatformat:'0' }}"
+            >
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Показать</button>
+        </div>
+    </form>
+
+    {% if error %}
+        <p class="text-danger">{{ error }}</p>
+    {% endif %}
+
+    <ul class="list-group mb-4">
+        {% for budget in large_budgets %}
+            <li class="list-group-item d-flex justify-content-between">
+                <a href="{% url 'budgets:detail' budget.id %}">
+                    {{ budget.department_name }} – {{ budget.period }}
+                </a>
+                <span class="badge bg-success">
+                    {{ budget.total|floatformat:"0g" }} руб.
+                </span>
+            </li>
+        {% empty %}
+            <li class="list-group-item">
+                Бюджетов с такой суммой нет.
+            </li>
+        {% endfor %}
+    </ul>
+
+    <h2 class="h4">Подразделения с несколькими бюджетами</h2>
+    <ul class="mb-4">
+        {% for row in busy_departments %}
+            <li>{{ row.department_name }} – бюджетов: {{ row.budgets_count }}</li>
+        {% empty %}
+            <li>Таких подразделений нет.</li>
+        {% endfor %}
+    </ul>
+{% endblock %}

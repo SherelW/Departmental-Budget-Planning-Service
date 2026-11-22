@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}
+    Бюджеты на дату – Бюджетное планирование
+{% endblock %}
+
+{% block content %}
+    <h1>Бюджеты на дату</h1>
+
+    <form method="get" class="row g-2 align-items-end mb-4">
+        <div class="col-auto">
+            <label for="date" class="form-label">Дата:</label>
+            <input
+                type="date"
+                id="date"
+                name="date"
+                class="form-control"
+                value="{{ date }}"
+            >
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Найти</button>
+        </div>
+    </form>
+
+    {% if error %}
+        <p class="text-danger">{{ error }}</p>
+    {% endif %}
+
+    {% if searched %}
+        <h2 class="h4">Действующие бюджеты на {{ date }}</h2>
+        <ul class="list-group mb-4">
+            {% for budget in budgets %}
+                <li class="list-group-item">
+                    <a href="{% url 'budgets:detail' budget.id %}">
+                        {{ budget.department_name }}
+                    </a>
+                    – {{ budget.period }}
+                    (руководитель: {{ budget.department_head }})
+                </li>
+            {% empty %}
+                <li class="list-group-item">
+                    На выбранную дату действующих бюджетов нет.
+                </li>
+            {% endfor %}
+        </ul>
+
+        <h2 class="h4">Подразделения без бюджета на {{ date }}</h2>
+        <ul class="list-group mb-4">
+            {% for department in free_departments %}
+                <li class="list-group-item">
+                    <a href="{% url 'departments:detail' department.id %}">
+                        {{ department.name }}
+                    </a>
+                    – руководитель {{ department.head }}
+                </li>
+            {% empty %}
+                <li class="list-group-item">
+                    У всех подразделений на эту дату есть бюджет.
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <p class="text-muted">
+        Периоды, на которые есть бюджеты:
+        {% for period in periods %}
+            {{ period.period }}{% if not forloop.last %}; {% endif %}
+        {% empty %}
+            данных нет
+        {% endfor %}
+    </p>
+
+    <a href="{% url 'budgets:list' %}" class="btn btn-outline-secondary">
+        ← к списку бюджетов
+    </a>
+{% endblock %}

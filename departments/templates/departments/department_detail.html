@@ -40,6 +40,30 @@
                     {% endfor %}
                 </ul>
 
+                {% if items %}
+                    <p class="card-text"><strong>Все статьи:</strong></p>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Период</th>
+                                <th>Статья</th>
+                                <th class="text-end">План</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                                <tr>
+                                    <td>{{ item.period }}</td>
+                                    <td>{{ item.category }}</td>
+                                    <td class="text-end">
+                                        {{ item.planned|floatformat:"0g" }} руб.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+
                 <p class="card-text">
                     <strong>Всего запланировано:</strong>
                     {{ total|floatformat:"0g" }} руб.

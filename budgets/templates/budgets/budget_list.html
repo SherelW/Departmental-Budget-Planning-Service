@@ -8,14 +8,15 @@
     <h1>Бюджеты</h1>
 
     <p>
-        Всего бюджетов: {{ budgets|length }}
+        Всего бюджетов: {{ budgets|length }}.
+        <a href="{% url 'budgets:search' %}">Бюджеты на выбранную дату</a>
     </p>
 
     <ul class="list-group mb-3">
         {% for budget in budgets %}
             <li class="list-group-item d-flex justify-content-between">
                 <a href="{% url 'budgets:detail' budget.id %}">
-                    {{ budget.department.name|default:"Без названия" }}
+                    {{ budget.department_name|default:"Без названия" }}
                     – {{ budget.period }}
                 </a>
                 {% include "budgets/includes/budget_status.html" %}
