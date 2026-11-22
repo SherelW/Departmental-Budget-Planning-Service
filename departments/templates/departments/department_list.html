@@ -7,6 +7,30 @@
 {% block content %}
     <h1>Подразделения</h1>
 
+    <form method="get" class="row g-2 align-items-end mb-4">
+        <div class="col-auto">
+            <label for="q" class="form-label">
+                Поиск по названию или руководителю:
+            </label>
+            <input
+                type="text"
+                id="q"
+                name="q"
+                class="form-control"
+                value="{{ query }}"
+            >
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Найти</button>
+            <a
+                href="{% url 'departments:list' %}"
+                class="btn btn-outline-secondary"
+            >
+                Сбросить
+            </a>
+        </div>
+    </form>
+
     <p>
         Всего подразделений: {{ departments|length }}
     </p>

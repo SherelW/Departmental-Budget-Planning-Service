@@ -1,50 +1,131 @@
-import math
-import sqlite3
-from datetime import date
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 
-from django.shortcuts import render
+from django.core.paginator import Paginator
+from django.db.models import Avg, Count, F, Max, Min, Sum
+from django.shortcuts import get_object_or_404, render
 
-from db.database import get_connection
+from budgets.expressions import sum_planned
+from budgets.models import Budget, BudgetItem
+from departments.models import Department
 
-DEFAULT_MIN_TOTAL = 600_000
-LARGE_ITEM = 200_000
+PAGE_SIZE = 3
+DEFAULT_MIN_TOTAL = Decimal("600000")
+LARGE_ITEM = Decimal("200000")
+MAX_AMOUNT = Decimal("999999999999")
+
+# Допустимые значения параметра sort и соответствующие поля сортировки.
+# Произвольное значение из адреса в order_by() не передаётся.
+SORT_FIELDS = {
+    "period": "period_start",
+    "department": "department__name",
+    "total": "-total",
+}
+
+
+def parse_date(text):
+    """Дата из строки YYYY-MM-DD или None, если формат неверный."""
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def parse_id(text):
+    """Целое число из строки или None, если это не идентификатор."""
+    if text.isascii() and text.isdigit() and len(text) <= 9:
+        return int(text)
+    return None
+
+
+def parse_amount(text):
+    """Неотрицательная сумма из строки или None, если значение неверное."""
+    try:
+        amount = Decimal(text)
+    except InvalidOperation:
+        return None
+    if not amount.is_finite() or amount < 0 or amount > MAX_AMOUNT:
+        return None
+    return amount
 
 
 def budgets(request):
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        budgets_data = conn.execute("""
-            SELECT
-                b.id,
-                b.period,
-                d.name AS department_name,
-                COALESCE(SUM(bi.planned), 0) AS total
-            FROM budgets AS b
-            JOIN departments AS d
-                ON b.department_id = d.id
-            LEFT JOIN budget_items AS bi
-                ON bi.budget_id = b.id
-            GROUP BY b.id, b.period, d.name
-            ORDER BY b.period_start, d.name;
-        """).fetchall()
+    date_text = request.GET.get("date", "").strip()
+    department_text = request.GET.get("department", "").strip()
+    query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "period")
+    error = None
 
-        period_totals = conn.execute("""
-            SELECT
-                b.period,
-                SUM(bi.planned) AS total
-            FROM budgets AS b
-            JOIN budget_items AS bi
-                ON bi.budget_id = b.id
-            GROUP BY b.period
-            ORDER BY MIN(b.period_start);
-        """).fetchall()
-    finally:
-        conn.close()
+    budgets_data = Budget.objects.all()
+
+    # Фильтр по дате: бюджеты, действующие на выбранную дату.
+    if date_text:
+        selected_date = parse_date(date_text)
+        if selected_date is None:
+            error = "Укажите корректную дату."
+        else:
+            budgets_data = budgets_data.filter(
+                period_start__lte=selected_date,
+                period_end__gte=selected_date,
+            )
+
+    # Фильтр по подразделению (внешний ключ).
+    department_id = parse_id(department_text)
+    if department_id is not None:
+        budgets_data = budgets_data.filter(department_id=department_id)
+
+    # Поиск по названию подразделения: поле связанной модели.
+    if query:
+        budgets_data = budgets_data.filter(
+            department__name__icontains=query
+        )
+
+    # Сортировка по разрешённому полю; неизвестное значение – по периоду.
+    if sort not in SORT_FIELDS:
+        sort = "period"
+
+    budgets_data = (
+        budgets_data
+        .annotate(
+            department_name=F("department__name"),
+            total=sum_planned(),
+        )
+        .order_by(SORT_FIELDS[sort], "id")
+        .values(
+            "id",
+            "period",
+            "period_start",
+            "department_name",
+            "total",
+        )
+    )
+
+    # Постраничный вывод применяется после фильтрации и сортировки.
+    paginator = Paginator(budgets_data, PAGE_SIZE)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    # Итоги по периодам (группировка по полю period).
+    period_totals = (
+        Budget.objects
+        .values("period")
+        .annotate(
+            total=Sum("items__planned"),
+            first_start=Min("period_start"),
+        )
+        .filter(total__isnull=False)
+        .order_by("first_start")
+    )
 
     context = {
-        "budgets": budgets_data,
+        "budgets": page_obj,
+        "page_obj": page_obj,
         "period_totals": period_totals,
+        "departments": Department.objects.order_by("name"),
+        "date": date_text,
+        "selected_department": department_text,
+        "query": query,
+        "sort": sort,
+        "error": error,
     }
 
     return render(
@@ -55,39 +136,17 @@ def budgets(request):
 
 
 def budget_detail(request, budget_id):
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        budget = conn.execute("""
-            SELECT
-                b.id,
-                b.period,
-                d.id AS department_id,
-                d.name AS department_name,
-                d.head AS department_head,
-                (
-                    SELECT COALESCE(SUM(bi.planned), 0)
-                    FROM budget_items AS bi
-                    WHERE bi.budget_id = b.id
-                ) AS total
-            FROM budgets AS b
-            JOIN departments AS d
-                ON b.department_id = d.id
-            WHERE b.id = ?;
-        """, [budget_id]).fetchone()
+    # select_related() загружает подразделение тем же запросом,
+    # annotate() добавляет итоговую сумму по статьям.
+    budget = get_object_or_404(
+        Budget.objects
+        .select_related("department")
+        .annotate(total=sum_planned()),
+        pk=budget_id,
+    )
 
-        items = []
-        if budget is not None:
-            items = conn.execute("""
-                SELECT
-                    category,
-                    planned
-                FROM budget_items
-                WHERE budget_id = ?
-                ORDER BY planned DESC;
-            """, [budget_id]).fetchall()
-    finally:
-        conn.close()
+    # Обратная связь: статьи бюджета.
+    items = budget.items.order_by("-planned", "category")
 
     context = {
         "budget": budget,
@@ -98,63 +157,57 @@ def budget_detail(request, budget_id):
         request,
         "budgets/budget_detail.html",
         context,
-        status=404 if budget is None else 200,
     )
 
 
 def budget_search(request):
-    date_text = request.GET.get("date", "")
+    date_text = request.GET.get("date", "").strip()
     error = None
     searched = False
     budgets_on_date = []
     free_departments = []
 
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        periods = conn.execute("""
-            SELECT DISTINCT
-                period,
-                period_start
-            FROM budgets
-            ORDER BY period_start;
-        """).fetchall()
+    if date_text:
+        selected_date = parse_date(date_text)
+        if selected_date is None:
+            error = "Некорректная дата. Выберите дату в календаре."
+        else:
+            searched = True
 
-        if date_text:
-            try:
-                date.fromisoformat(date_text)
-            except ValueError:
-                error = "Некорректная дата. Выберите дату в календаре."
-            else:
-                searched = True
-                budgets_on_date = conn.execute("""
-                    SELECT
-                        b.id,
-                        b.period,
-                        d.name AS department_name,
-                        d.head AS department_head
-                    FROM budgets AS b
-                    JOIN departments AS d
-                        ON b.department_id = d.id
-                    WHERE ? BETWEEN b.period_start AND b.period_end
-                    ORDER BY d.name;
-                """, [date_text]).fetchall()
+            # Бюджеты, действующие на выбранную дату.
+            active = Budget.objects.filter(
+                period_start__lte=selected_date,
+                period_end__gte=selected_date,
+            )
+            budgets_on_date = (
+                active
+                .annotate(
+                    department_name=F("department__name"),
+                    department_head=F("department__head"),
+                )
+                .values(
+                    "id",
+                    "period",
+                    "department_name",
+                    "department_head",
+                )
+                .order_by("department_name")
+            )
 
-                free_departments = conn.execute("""
-                    SELECT
-                        id,
-                        name,
-                        head
-                    FROM departments
-                    WHERE id NOT IN (
-                        SELECT department_id
-                        FROM budgets
-                        WHERE ? BETWEEN period_start AND period_end
-                    )
-                    ORDER BY name;
-                """, [date_text]).fetchall()
-    finally:
-        conn.close()
+            # Подразделения, у которых нет бюджета на эту дату.
+            busy_ids = active.values_list("department_id", flat=True)
+            free_departments = (
+                Department.objects
+                .exclude(pk__in=busy_ids)
+                .order_by("name")
+            )
+
+    periods = (
+        Budget.objects
+        .values("period", "period_start")
+        .distinct()
+        .order_by("period_start")
+    )
 
     context = {
         "date": date_text,
@@ -175,105 +228,82 @@ def budget_search(request):
 def statistics(request):
     min_total = DEFAULT_MIN_TOTAL
     error = None
-    min_total_text = request.GET.get("min_total", "")
+    min_total_text = request.GET.get("min_total", "").strip()
     if min_total_text:
-        try:
-            min_total = float(min_total_text)
-            if not math.isfinite(min_total) or min_total < 0:
-                raise ValueError
-        except ValueError:
-            min_total = DEFAULT_MIN_TOTAL
+        parsed = parse_amount(min_total_text)
+        if parsed is None:
             error = "Минимальная сумма должна быть неотрицательным числом."
+        else:
+            min_total = parsed
 
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        budgets_count = conn.execute("""
-            SELECT
-                COUNT(*) AS budgets_count
-            FROM budgets;
-        """).fetchone()["budgets_count"]
+    # Количество бюджетов и сводные показатели по статьям.
+    budgets_count = Budget.objects.count()
+    totals = BudgetItem.objects.aggregate(
+        total_planned=Sum("planned"),
+        avg_item=Avg("planned"),
+        min_item=Min("planned"),
+        max_item=Max("planned"),
+    )
+    totals = {key: value or 0 for key, value in totals.items()}
 
-        totals = conn.execute("""
-            SELECT
-                COALESCE(SUM(planned), 0) AS total_planned,
-                COALESCE(AVG(planned), 0) AS avg_item,
-                COALESCE(MIN(planned), 0) AS min_item,
-                COALESCE(MAX(planned), 0) AS max_item
-            FROM budget_items;
-        """).fetchone()
+    # Подразделения без бюджетов тоже попадают в статистику.
+    by_department = (
+        Department.objects
+        .annotate(
+            department_name=F("name"),
+            budgets_count=Count("budgets", distinct=True),
+            total=sum_planned("budgets__items__planned"),
+        )
+        .values("department_name", "budgets_count", "total")
+        .order_by("-total", "department_name")
+    )
 
-        by_department = conn.execute("""
-            SELECT
-                d.name AS department_name,
-                COUNT(DISTINCT b.id) AS budgets_count,
-                COALESCE(SUM(bi.planned), 0) AS total
-            FROM departments AS d
-            LEFT JOIN budgets AS b
-                ON b.department_id = d.id
-            LEFT JOIN budget_items AS bi
-                ON bi.budget_id = b.id
-            GROUP BY d.id, d.name
-            ORDER BY total DESC;
-        """).fetchall()
+    by_category = (
+        BudgetItem.objects
+        .values("category")
+        .annotate(
+            items_count=Count("pk"),
+            total=Sum("planned"),
+        )
+        .order_by("-total", "category")
+    )
 
-        by_category = conn.execute("""
-            SELECT
-                category,
-                COUNT(*) AS items_count,
-                SUM(planned) AS total
-            FROM budget_items
-            GROUP BY category
-            ORDER BY total DESC;
-        """).fetchall()
+    # Срез QuerySet: три самые крупные статьи.
+    top_items = (
+        BudgetItem.objects
+        .order_by("-planned", "category")
+        .values("category", "planned")[:3]
+    )
 
-        top_items = conn.execute("""
-            SELECT
-                category,
-                planned
-            FROM budget_items
-            ORDER BY planned DESC, category
-            LIMIT 3 OFFSET 0;
-        """).fetchall()
+    large_items = (
+        BudgetItem.objects
+        .filter(planned__gte=LARGE_ITEM)
+        .order_by("-planned", "category")
+        .values("category", "planned")
+    )
 
-        large_items = conn.execute("""
-            SELECT
-                category,
-                planned
-            FROM budget_items
-            WHERE planned >= ?
-            ORDER BY planned DESC;
-        """, [LARGE_ITEM]).fetchall()
+    # Фильтрация по результату агрегации (HAVING в SQL).
+    large_budgets = (
+        Budget.objects
+        .annotate(
+            department_name=F("department__name"),
+            total=Sum("items__planned"),
+        )
+        .filter(total__gte=min_total)
+        .values("id", "period", "department_name", "total")
+        .order_by("-total", "id")
+    )
 
-        large_budgets = conn.execute("""
-            SELECT
-                b.id,
-                b.period,
-                d.name AS department_name,
-                SUM(bi.planned) AS total
-            FROM budgets AS b
-            JOIN departments AS d
-                ON b.department_id = d.id
-            JOIN budget_items AS bi
-                ON bi.budget_id = b.id
-            GROUP BY b.id, b.period, d.name
-            HAVING SUM(bi.planned) >= ?
-            ORDER BY total DESC;
-        """, [min_total]).fetchall()
-
-        busy_departments = conn.execute("""
-            SELECT
-                d.name AS department_name,
-                COUNT(b.id) AS budgets_count
-            FROM departments AS d
-            JOIN budgets AS b
-                ON b.department_id = d.id
-            GROUP BY d.id, d.name
-            HAVING COUNT(b.id) > 1
-            ORDER BY budgets_count DESC;
-        """).fetchall()
-    finally:
-        conn.close()
+    busy_departments = (
+        Department.objects
+        .annotate(
+            department_name=F("name"),
+            budgets_count=Count("budgets"),
+        )
+        .filter(budgets_count__gt=1)
+        .values("department_name", "budgets_count")
+        .order_by("-budgets_count", "department_name")
+    )
 
     context = {
         "budgets_count": budgets_count,

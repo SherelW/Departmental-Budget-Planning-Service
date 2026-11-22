@@ -19,13 +19,13 @@
                 <p class="card-text">
                     <strong>Подразделение:</strong>
                     <a href="{% url 'departments:detail' budget.department_id %}">
-                        {{ budget.department_name }}
+                        {{ budget.department.name }}
                     </a>
                 </p>
 
                 <p class="card-text">
                     <strong>Руководитель:</strong>
-                    {{ budget.department_head }}
+                    {{ budget.department.head }}
                 </p>
 
                 <p class="card-text">

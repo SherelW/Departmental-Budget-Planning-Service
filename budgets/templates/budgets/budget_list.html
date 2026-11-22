@@ -7,8 +7,93 @@
 {% block content %}
     <h1>Бюджеты</h1>
 
+    <form method="get" class="mb-4">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="date" class="form-label">
+                    Бюджеты на дату
+                </label>
+                <input
+                    type="date"
+                    id="date"
+                    name="date"
+                    class="form-control"
+                    value="{{ date }}"
+                >
+            </div>
+            <div class="col-md-3">
+                <label for="department" class="form-label">
+                    Подразделение
+                </label>
+                <select
+                    id="department"
+                    name="department"
+                    class="form-select"
+                >
+                    <option value="">Все подразделения</option>
+                    {% for department in departments %}
+                        <option
+                            value="{{ department.pk }}"
+                            {% if selected_department == department.pk|stringformat:"s" %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ department.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="q" class="form-label">Поиск по названию</label>
+                <input
+                    type="text"
+                    id="q"
+                    name="q"
+                    class="form-control"
+                    value="{{ query }}"
+                >
+            </div>
+            <div class="col-md-2">
+                <label for="sort" class="form-label">Сортировать по</label>
+                <select id="sort" name="sort" class="form-select">
+                    <option
+                        value="period"
+                        {% if sort == "period" %}selected{% endif %}
+                    >
+                        Периоду
+                    </option>
+                    <option
+                        value="department"
+                        {% if sort == "department" %}selected{% endif %}
+                    >
+                        Подразделению
+                    </option>
+                    <option
+                        value="total"
+                        {% if sort == "total" %}selected{% endif %}
+                    >
+                        Сумме (по убыванию)
+                    </option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary">Найти</button>
+                <a
+                    href="{% url 'budgets:list' %}"
+                    class="btn btn-outline-secondary"
+                >
+                    Сбросить
+                </a>
+            </div>
+        </div>
+    </form>
+
+    {% if error %}
+        <p class="text-danger">{{ error }}</p>
+    {% endif %}
+
     <p>
-        Всего бюджетов: {{ budgets|length }}.
+        Найдено бюджетов: {{ page_obj.paginator.count }}.
         <a href="{% url 'budgets:search' %}">Бюджеты на выбранную дату</a>
     </p>
 
@@ -27,6 +112,59 @@
             </li>
         {% endfor %}
     </ul>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="Навигация по страницам">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a
+                            class="page-link"
+                            href="{% querystring page=page_obj.previous_page_number %}"
+                        >
+                            Назад
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Назад</span>
+                    </li>
+                {% endif %}
+
+                {% for page_number in page_obj.paginator.page_range %}
+                    {% if page_number == page_obj.number %}
+                        <li class="page-item active" aria-current="page">
+                            <span class="page-link">{{ page_number }}</span>
+                        </li>
+                    {% else %}
+                        <li class="page-item">
+                            <a
+                                class="page-link"
+                                href="{% querystring page=page_number %}"
+                            >
+                                {{ page_number }}
+                            </a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a
+                            class="page-link"
+                            href="{% querystring page=page_obj.next_page_number %}"
+                        >
+                            Далее
+                        </a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Далее</span>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    {% endif %}
 
     {% for item in period_totals %}
         <p>

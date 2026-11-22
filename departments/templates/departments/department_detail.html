@@ -53,7 +53,7 @@
                         <tbody>
                             {% for item in items %}
                                 <tr>
-                                    <td>{{ item.period }}</td>
+                                    <td>{{ item.budget.period }}</td>
                                     <td>{{ item.category }}</td>
                                     <td class="text-end">
                                         {{ item.planned|floatformat:"0g" }} руб.

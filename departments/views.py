@@ -1,27 +1,25 @@
-import sqlite3
+from django.db.models import Q, Sum
+from django.shortcuts import get_object_or_404, render
 
-from django.shortcuts import render
-
-from db.database import get_connection
+from budgets.expressions import sum_planned
+from budgets.models import BudgetItem
+from departments.models import Department
 
 
 def departments(request):
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        departments_data = conn.execute("""
-            SELECT
-                id,
-                name,
-                head
-            FROM departments
-            ORDER BY name;
-        """).fetchall()
-    finally:
-        conn.close()
+    query = request.GET.get("q", "").strip()
+
+    departments_list = Department.objects.all()
+
+    # Поиск по названию или по руководителю (условие «ИЛИ» через Q).
+    if query:
+        departments_list = departments_list.filter(
+            Q(name__icontains=query) | Q(head__icontains=query)
+        )
 
     context = {
-        "departments": departments_data,
+        "departments": departments_list.order_by("name"),
+        "query": query,
     }
 
     return render(
@@ -32,62 +30,29 @@ def departments(request):
 
 
 def department_detail(request, department_id):
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        department = conn.execute("""
-            SELECT
-                id,
-                name,
-                head
-            FROM departments
-            WHERE id = ?;
-        """, [department_id]).fetchone()
+    # Если подразделения нет, get_object_or_404() вернёт ответ 404.
+    department = get_object_or_404(Department, pk=department_id)
 
-        budgets_data = []
-        items = []
-        total = 0
-        if department is not None:
-            budgets_data = conn.execute("""
-                SELECT
-                    b.id,
-                    b.period,
-                    COALESCE(SUM(bi.planned), 0) AS total
-                FROM budgets AS b
-                LEFT JOIN budget_items AS bi
-                    ON bi.budget_id = b.id
-                WHERE b.department_id = ?
-                GROUP BY b.id, b.period
-                ORDER BY b.period_start;
-            """, [department_id]).fetchall()
+    # Обратная связь: бюджеты подразделения с суммой по статьям.
+    budgets_list = (
+        department.budgets
+        .annotate(total=sum_planned())
+        .order_by("period_start")
+    )
 
-            items = conn.execute("""
-                SELECT
-                    b.id AS budget_id,
-                    b.period,
-                    bi.category,
-                    bi.planned
-                FROM budget_items AS bi
-                JOIN budgets AS b
-                    ON bi.budget_id = b.id
-                WHERE b.department_id = ?
-                ORDER BY b.period_start, bi.planned DESC;
-            """, [department_id]).fetchall()
+    # Фильтрация по полю связанной модели: budget__department.
+    items = (
+        BudgetItem.objects
+        .filter(budget__department=department)
+        .select_related("budget")
+        .order_by("budget__period_start", "-planned")
+    )
 
-            total = conn.execute("""
-                SELECT
-                    COALESCE(SUM(bi.planned), 0) AS total
-                FROM budget_items AS bi
-                JOIN budgets AS b
-                    ON bi.budget_id = b.id
-                WHERE b.department_id = ?;
-            """, [department_id]).fetchone()["total"]
-    finally:
-        conn.close()
+    total = items.aggregate(total=Sum("planned"))["total"] or 0
 
     context = {
         "department": department,
-        "budgets": budgets_data,
+        "budgets": budgets_list,
         "items": items,
         "total": total,
     }
@@ -96,5 +61,4 @@ def department_detail(request, department_id):
         request,
         "departments/department_detail.html",
         context,
-        status=404 if department is None else 200,
     )

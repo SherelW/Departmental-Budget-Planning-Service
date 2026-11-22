@@ -1,169 +1,133 @@
 # Бюджетное планирование подразделений
 
-Система планирования бюджетов подразделений на Python с веб-интерфейсом на Django и хранением данных в SQLite.
+Система планирования бюджетов подразделений на Python и Django. Данные хранятся в базе SQLite
+и обрабатываются через Django ORM.
 
 ## 1. Назначение проекта
-Приложение хранит подразделения, их бюджеты на период и статьи расходов. Данные просматриваются через веб-интерфейс:
-списки, карточки, поиск бюджетов на выбранную дату и статистика. Проект развивается поэтапно:
-консольная версия и JSON-хранилище (ПР1–ПР3), веб-интерфейс на Django (ПР5), шаблоны Django (ПР6),
-реляционная база SQLite и SQL-запросы (ПР7).
+Приложение хранит подразделения, их бюджеты на период и статьи расходов. Через веб-интерфейс можно просматривать списки
+и карточки, искать, фильтровать, сортировать бюджеты, смотреть бюджеты на выбранную дату и статистику.
+
+Этапы развития проекта: консольная версия и JSON (ПР1–ПР3), веб-интерфейс на Django (ПР5), шаблоны (ПР6),
+база SQLite и SQL-запросы (ПР7), **Django ORM и модели (ПР9)**.
 
 ## 2. Используемые технологии
-- Python 3, стандартная библиотека `sqlite3`;
-- SQLite, язык SQL;
-- Django 5.2 (LTS), Django Template Language;
-- HTML5, CSS3, JavaScript, Bootstrap 5.3;
-- JSON (исходные данные), pytest, flake8, Git.
+- Python 3, Django 5.2 (LTS), Django ORM и миграции;
+- SQLite (файл `db.sqlite3` Django и исходная база ПР7 `data/budget_planning.sqlite`);
+- Django Template Language, HTML5, CSS3, JavaScript, Bootstrap 5.3;
+- pytest, flake8, Git.
 
-## 3. Предметная область
-Классы предметной области (пакет `models/`, ПР3): `Department`, `BudgetItem`, `Budget`, `Planning`.
-Они и консольная версия (`main.py`) сохранены. Веб-интерфейс с ПР7 получает данные из SQLite.
+## 3. Модели Django
+Модели описаны в `models.py` приложений. Корневой пакет `models/` (классы ПР3) – это другое: он остаётся
+как предыдущая реализация консольной версии.
 
-## 4. Структура проекта
+| Модель | Приложение | Таблица | Назначение |
+|--------|------------|---------|------------|
+| `Department` | `departments` | `departments_department` | подразделение |
+| `Budget` | `budgets` | `budgets_budget` | бюджет подразделения на период |
+| `BudgetItem` | `budgets` | `budgets_budgetitem` | статья бюджета |
+
+**Department:** `name` (CharField, unique), `head` (CharField). Сортировка по умолчанию – по названию.
+
+**Budget:** `department` (ForeignKey → Department, `on_delete=PROTECT`, `related_name="budgets"`), `period` (CharField),
+`period_start`, `period_end` (DateField). Ограничение `CheckConstraint`: начало периода не позже конца.
+Метод `get_total_planned()` – сумма статей бюджета.
+
+**BudgetItem:** `budget` (ForeignKey → Budget, `on_delete=CASCADE`, `related_name="items"`), `category` (CharField),
+`planned` (DecimalField). Ограничение: `planned > 0`.
+
+Связи: одно подразделение – много бюджетов, один бюджет – много статей.
+Подразделение с бюджетами удалить нельзя (`PROTECT`), при удалении бюджета его статьи удаляются (`CASCADE`).
+Деньги хранятся в `DecimalField`, а не в `float`, чтобы не накапливалась погрешность.
+
+## 4. Миграции
+```text
+python manage.py makemigrations
+python manage.py migrate
+```
+Миграции приложений лежат в `departments/migrations/` и `budgets/migrations/` и хранятся в Git.
+Просмотр SQL миграции: `python manage.py sqlmigrate budgets 0001`.
+
+## 5. Перенос данных из базы ПР7
+Источник – `data/budget_planning.sqlite` (ПР7), приёмник – база Django `db.sqlite3`.
+```text
+python db/inspect_source_db.py          # изучить исходную базу (только чтение)
+python db/import_sqlite_to_orm.py       # перенести данные через ORM
+```
+Скрипт переноса: читает исходную базу через `sqlite3`, создаёт объекты через `update_or_create()` в одной транзакции
+(`transaction.atomic`), сохраняет идентификаторы, превращает строки дат в `date`, суммы в `Decimal`.
+Порядок: подразделения → бюджеты → статьи (внешние ключи). Повторный запуск безопасен.
+Исходную базу желательно скопировать перед работой: `cp data/budget_planning.sqlite data/budget_planning_backup.sqlite`.
+
+## 6. Страницы сайта
+| URL | Что делает (ORM) |
+|-----|------------------|
+| `/` | главная |
+| `/departments/?q=` | список подразделений, поиск по названию или руководителю (`Q`, `icontains`) |
+| `/departments/<id>/` | подразделение (`get_object_or_404`), его бюджеты (`related_name`), статьи (`filter(budget__department=...)`) |
+| `/budgets/` | фильтры (дата, подразделение, поиск), сортировка, пагинация (3 на страницу), итоги по периодам |
+| `/budgets/<id>/` | бюджет с подразделением (`select_related`), сумма (`annotate`), статьи |
+| `/budgets/search/?date=` | бюджеты на дату и подразделения без бюджета (`exclude(pk__in=...)`) |
+| `/budgets/statistics/?min_total=` | `aggregate`, `annotate`, `Count`, `Sum`, `values`, `HAVING` через `filter` по агрегату |
+
+Параметры `/budgets/`: `date=YYYY-MM-DD`, `department=<id>`, `q=<текст>`, `sort=period|department|total`, `page=<номер>`.
+Некорректные значения не вызывают ошибок: неверная дата выводит сообщение, неверный идентификатор игнорируется,
+неизвестное поле сортировки заменяется сортировкой по периоду, неверный номер страницы открывает первую страницу.
+
+## 7. Используемые ORM-выражения
+- получение: `all()`, `get_object_or_404()`, `count()`;
+- фильтрация: `filter()` по одному и нескольким условиям, по полю связанной модели, `exclude()`, `__lte`, `__gte`, `__gt`;
+- поиск: `icontains` (одно поле), `Q(...) | Q(...)` (несколько полей);
+- сортировка: `order_by()` по нескольким полям, по полю связанной модели, по аннотации, по убыванию;
+- связи: `select_related()`, обратные связи `department.budgets` и `budget.items`;
+- агрегирование: `aggregate(Sum, Avg, Min, Max)`, `annotate(Count, Sum)`, `Coalesce`, `values()`, `F()`;
+- пагинация: `Paginator`, `get_page()`; срез `[:3]`.
+
+Особенность SQLite: `icontains` не различает регистр только для латинских букв. Для кириллицы поиск «отдел» не найдёт
+«Отдел», вводите текст в том же регистре, что в названии.
+
+## 8. Структура проекта
 ```text
 budget_planning/
-├── budgetplan/              # настройки Django-проекта
-├── templates/               # base.html, 404.html, includes/navigation.html
-├── homepage/                # главная, статика (css, js, логотип)
-├── departments/             # страницы подразделений
-├── budgets/                 # страницы бюджетов, поиск на дату, статистика
-├── db/
-│   ├── __init__.py
-│   ├── database.py          # подключение к SQLite, создание схемы
-│   ├── import_json.py       # перенос данных из JSON в SQLite
-│   └── init_db.py           # пересоздание базы: схема + импорт
-├── sql/
-│   ├── schema.sql           # создание таблиц
-│   └── queries.sql          # SQL-запросы проекта (20 запросов)
-├── data/
-│   ├── planning.json        # исходные данные (JSON, ПР1–ПР6)
-│   └── budget_planning.sqlite   # база данных SQLite
-├── models/                  # классы предметной области (ПР3)
-├── tests/                   # pytest-тесты
-├── main.py                  # консольная версия
-├── storage.py               # JSON-хранилище (ПР3)
+├── budgetplan/          # настройки проекта
+├── templates/           # base.html, 404.html, includes/
+├── homepage/            # главная, статика, Django-тесты страниц
+├── departments/         # models.py, views.py, admin.py, шаблоны
+├── budgets/             # models.py, expressions.py, views.py, admin.py, шаблоны
+├── db/                  # скрипты ПР7 и переноса данных в ORM (ПР9)
+├── sql/                 # schema.sql, queries.sql (ПР7)
+├── data/                # planning.json, budget_planning.sqlite
+├── models/              # классы предметной области (ПР3)
+├── tests/               # pytest-тесты
+├── main.py, storage.py  # консольная версия
 └── manage.py
 ```
 
-## 5. Структура базы данных
-Для каждой сущности предметной области создана таблица. Первичный ключ каждой таблицы – поле `id`.
-
-**departments** – подразделения
-
-| Поле | Тип | Назначение |
-|------|-----|------------|
-| id | INTEGER | идентификатор, первичный ключ |
-| name | TEXT NOT NULL UNIQUE | название подразделения |
-| head | TEXT NOT NULL | руководитель |
-
-**budgets** – бюджеты подразделений на период
-
-| Поле | Тип | Назначение |
-|------|-----|------------|
-| id | INTEGER | идентификатор, первичный ключ |
-| department_id | INTEGER NOT NULL | внешний ключ на `departments.id` |
-| period | TEXT NOT NULL | период для показа: `01.09.2026 - 30.09.2026` |
-| period_start | TEXT NOT NULL | начало периода, `YYYY-MM-DD` |
-| period_end | TEXT NOT NULL | конец периода, `YYYY-MM-DD` |
-
-**budget_items** – статьи бюджета
-
-| Поле | Тип | Назначение |
-|------|-----|------------|
-| id | INTEGER | идентификатор, первичный ключ |
-| budget_id | INTEGER NOT NULL | внешний ключ на `budgets.id` |
-| category | TEXT NOT NULL | статья расходов |
-| planned | REAL NOT NULL | плановая сумма, `CHECK (planned > 0)` |
-
-Связи: `budgets.department_id → departments.id`, `budget_items.budget_id → budgets.id`.
-Одно подразделение имеет несколько бюджетов, один бюджет – несколько статей.
-Даты хранятся строками `YYYY-MM-DD`: их можно сравнивать и сортировать средствами SQL (`BETWEEN`, `ORDER BY`).
-Поля `NOT NULL` не допускают отсутствия значения; `CHECK` защищает от неположительных сумм.
-
-## 6. Создание и наполнение базы
-```text
-python -m db.init_db
-```
-Команда удаляет старый файл базы, создаёт таблицы из `sql/schema.sql` (`CREATE TABLE IF NOT EXISTS`) и переносит данные
-из `data/planning.json` скриптом `db/import_json.py`. Отдельно импорт запускается так: `python -m db.import_json`.
-
-- `db/database.py` – `get_connection()` подключается к SQLite и включает `PRAGMA foreign_keys = ON`;
-- `db/import_json.py` – `executemany()` с параметрами `?`; период `01.09.2026 - 30.09.2026` разбирается в две ISO-даты;
-  порядок импорта: подразделения, бюджеты, статьи (внешние ключи требуют существующих родительских записей);
-  при ошибке выполняется `rollback()`.
-
-## 7. SQL-запросы (`sql/queries.sql`)
-Всего 20 запросов, каждый проверен в SQLite CLI и с комментарием:
-
-| Вид | Запросы |
-|-----|---------|
-| Выборка списков (`SELECT`, `ORDER BY`, `DISTINCT`, `LIMIT/OFFSET`) | 1–3 |
-| Фильтрация (`WHERE`) | 4–6 |
-| Соединение таблиц (`JOIN`, подзапрос `NOT IN`) | 7–10 |
-| Агрегатные функции (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`) | 11–13 |
-| Группировка (`GROUP BY`) | 14–18 |
-| Фильтрация групп (`HAVING`) | 19–20 |
-
-Проверка в консоли: `sqlite3 data/budget_planning.sqlite`.
-
-## 8. Получение данных из SQLite в Django
-Путь данных: `SQLite → SQL → sqlite3 → view → context → шаблон → страница`.
-В представлениях используется `conn.row_factory = sqlite3.Row`, поэтому поля доступны по именам
-(`{{ budget.department_name }}`). Все значения, пришедшие от пользователя или из URL, передаются в запросы параметрами `?`
-(`conn.execute(query, [value])`), строки SQL через f-строки не формируются.
-
-## 9. Страницы сайта
-| URL | Имя маршрута | Данные из SQLite |
-|-----|--------------|------------------|
-| `/` | `homepage:index` | – |
-| `/departments/` | `departments:list` | список подразделений |
-| `/departments/<id>/` | `departments:detail` | подразделение, его бюджеты, статьи, итог |
-| `/budgets/` | `budgets:list` | бюджеты с суммами (JOIN + GROUP BY), итоги по периодам |
-| `/budgets/<id>/` | `budgets:detail` | бюджет, подразделение, статьи, итог |
-| `/budgets/search/?date=YYYY-MM-DD` | `budgets:search` | бюджеты на дату и подразделения без бюджета |
-| `/budgets/statistics/?min_total=N` | `budgets:statistics` | агрегаты, группировки, HAVING |
-
-Если объект не найден, страница возвращает статус 404. Неверная дата или число в поиске дают понятное сообщение.
-Навигация: Главная | Подразделения | Бюджеты | Статистика; ссылки формируются через `{% url %}`.
-
-## 10. Запуск
+## 9. Запуск
 ```text
 python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
-python -m db.init_db            # если нужно пересоздать базу
+python manage.py makemigrations
 python manage.py migrate
+python db/import_sqlite_to_orm.py
 python manage.py runserver
 ```
-Адрес: http://127.0.0.1:8000/. Консольная версия: `python main.py` (перезаписывает `data/planning.json`;
-после этого выполните `python -m db.init_db`, чтобы обновить базу).
+Адрес: http://127.0.0.1:8000/. Администрирование: `python manage.py createsuperuser`, затем http://127.0.0.1:8000/admin/.
 
-## 11. Тестирование и качество кода
+## 10. Проверка
 ```text
 python manage.py check
-pytest -v
 python manage.py test
+pytest -v
 flake8 . --extend-exclude=venv
 ```
+Django-тесты создают собственные данные в тестовой базе и не зависят от `db.sqlite3`.
 
-## 12. Git
-Коммиты ПР7 начинаются с метки `PR7:`:
-```text
-git commit -m "PR7: add SQLite database and SQL queries"
-```
+## 11. Git
+Коммиты ПР9 начинаются с метки `PR9:`. Файл `db.sqlite3` в репозиторий не добавляется (он в `.gitignore`).
+Файлы миграций в репозиторий добавляются.
 
-## 13. Текущий этап разработки
-На ПР7 данные перенесены из JSON в SQLite:
-
-- создана база `data/budget_planning.sqlite`, таблицы описаны в `sql/schema.sql`;
-- данные перенесены скриптом `db/import_json.py`;
-- запросы сохранены в `sql/queries.sql`;
-- Django-представления получают данные из SQLite через `sqlite3` и параметризованные запросы;
-- работают страницы списков, карточек, поиска бюджетов на дату и статистики.
-
-JSON-хранилище, классы `models/` и консольная версия сохранены как предыдущая реализация.
-Django ORM на этом этапе не используется.
-
-## 14. Дальнейшее развитие
-Подключение базы к Django ORM (модели, миграции), формы создания и редактирования, административная панель,
-авторизация, API.
+## 12. Текущее состояние и дальнейшее развитие
+Реализовано: Django-модели и связи, миграции, перенос данных из SQLite, ORM-запросы на всех страницах,
+фильтрация, поиск, сортировка, пагинация, статистика, админ-панель.
+Планируется: формы Django, создание и редактирование объектов через сайт, авторизация, API.
